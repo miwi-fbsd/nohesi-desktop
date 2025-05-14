@@ -1,0 +1,14 @@
+{
+  "title": "No Hesi Server Browser",
+  "settings": "Settings",
+  "open_settings": "Open",
+  "region": "Region",
+  "traffic": "Traffic",
+  "type": "Type",
+  "map": "Map",
+  "favorites_only": "Only Favorites",
+  "most_played": "Sort by Most Played",
+  "join_now": "Join Now",
+  "loading": "🔄 Loading server data...",
+  "loaded": "✅ {count} servers loaded"
+}
