@@ -1,0 +1,208 @@
+import sys
+import os
+import requests
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QComboBox, QTableWidget, QTableWidgetItem,
+    QLabel, QMainWindow, QPushButton, QMessageBox, QHBoxLayout, QCheckBox
+)
+from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject
+
+
+# Worker Signals
+class WorkerSignals(QObject):
+    finished = pyqtSignal(list)
+
+
+# Hintergrund-Worker
+class ServerLoader(QRunnable):
+    def __init__(self):
+        super().__init__()
+        self.signals = WorkerSignals()
+
+    def run(self):
+        all_servers = []
+        page = 1
+        while True:
+            url = f"https://hub.nohesi.gg/servers?page={page}"
+            try:
+                response = requests.get(url)
+                response.raise_for_status()
+                data = response.json()
+                servers = data.get("data", {}).get("servers", [])
+                if not servers:
+                    break
+                all_servers.extend(servers)
+                if len(servers) < 10:
+                    break
+                page += 1
+            except Exception as e:
+                print(f"Fehler auf Seite {page}: {e}")
+                break
+
+        self.signals.finished.emit(all_servers)
+
+
+class ServerBrowser(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("No Hesi Server Browser")
+        self.resize(1000, 600)
+
+        self.threadpool = QThreadPool()
+
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout()
+        self.central_widget.setLayout(self.layout)
+
+        self.filter_layout = QHBoxLayout()
+
+        self.region_filter = QComboBox()
+        self.region_filter.addItem("Alle Regionen")
+        self.region_filter.currentTextChanged.connect(self.apply_filters)
+
+        self.density_filter = QComboBox()
+        self.density_filter.addItem("Alle Dichten")
+        self.density_filter.currentTextChanged.connect(self.apply_filters)
+
+        self.type_filter = QComboBox()
+        self.type_filter.addItem("Alle Typen")
+        self.type_filter.currentTextChanged.connect(self.apply_filters)
+
+        self.map_filter = QComboBox()
+        self.map_filter.addItem("Alle Maps")
+        self.map_filter.currentTextChanged.connect(self.apply_filters)
+
+        self.sort_checkbox = QCheckBox("Most Played zuerst")
+        self.sort_checkbox.stateChanged.connect(self.apply_filters)
+
+        self.filter_layout.addWidget(QLabel("Region:"))
+        self.filter_layout.addWidget(self.region_filter)
+        self.filter_layout.addWidget(QLabel("Traffic:"))
+        self.filter_layout.addWidget(self.density_filter)
+        self.filter_layout.addWidget(QLabel("Typ:"))
+        self.filter_layout.addWidget(self.type_filter)
+        self.filter_layout.addWidget(QLabel("Map:"))
+        self.filter_layout.addWidget(self.map_filter)
+        self.filter_layout.addWidget(self.sort_checkbox)
+
+        self.info_label = QLabel("🔄 Lade Serverdaten...")
+        self.table = QTableWidget()
+        self.table.cellDoubleClicked.connect(self.handle_click)
+
+        self.join_button = QPushButton("Jetzt beitreten")
+        self.join_button.clicked.connect(self.join_selected_server)
+
+        self.layout.addWidget(self.info_label)
+        self.layout.addLayout(self.filter_layout)
+        self.layout.addWidget(self.table)
+        self.layout.addWidget(self.join_button)
+
+        self.all_servers = []
+        self.load_all_servers_async()
+
+    def load_all_servers_async(self):
+        self.info_label.setText("🔄 Lade Serverdaten...")
+        loader = ServerLoader()
+        loader.signals.finished.connect(self.on_servers_loaded)
+        self.threadpool.start(loader)
+
+    def on_servers_loaded(self, servers):
+        self.all_servers = servers
+        self.info_label.setText(f"✅ {len(self.all_servers)} Server geladen")
+        self.init_filters()
+        self.populate_table(self.all_servers)
+
+    def init_filters(self):
+        self.region_filter.clear()
+        self.density_filter.clear()
+        self.type_filter.clear()
+        self.map_filter.clear()
+
+        self.region_filter.addItem("Alle Regionen")
+        self.density_filter.addItem("Alle Dichten")
+        self.type_filter.addItem("Alle Typen")
+        self.map_filter.addItem("Alle Maps")
+
+        regions = sorted(set(s.get("region", "Unbekannt") for s in self.all_servers))
+        densities = sorted(set(s.get("density", "Unbekannt") for s in self.all_servers))
+        types = sorted(set(s.get("type", "Unbekannt") for s in self.all_servers))
+        maps = sorted(set(s.get("map", "Unbekannt") for s in self.all_servers))
+
+        for val in regions:
+            self.region_filter.addItem(val)
+        for val in densities:
+            self.density_filter.addItem(val)
+        for val in types:
+            self.type_filter.addItem(val)
+        for val in maps:
+            self.map_filter.addItem(val)
+
+    def apply_filters(self):
+        region = self.region_filter.currentText()
+        density = self.density_filter.currentText()
+        server_type = self.type_filter.currentText()
+        map_val = self.map_filter.currentText()
+        sort_by_players = self.sort_checkbox.isChecked()
+
+        filtered = self.all_servers
+
+        if region != "Alle Regionen":
+            filtered = [s for s in filtered if s.get("region") == region]
+
+        if density != "Alle Dichten":
+            filtered = [s for s in filtered if s.get("density") == density]
+
+        if server_type != "Alle Typen":
+            filtered = [s for s in filtered if s.get("type") == server_type]
+
+        if map_val != "Alle Maps":
+            filtered = [s for s in filtered if s.get("map") == map_val]
+
+        if sort_by_players:
+            filtered.sort(key=lambda x: x.get("clients", 0), reverse=True)
+
+        self.populate_table(filtered)
+
+    def populate_table(self, data):
+        self.table.setRowCount(len(data))
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels(["Name", "IP", "Region", "Map", "Spieler", "Density", "Typ"])
+
+        for row, s in enumerate(data):
+            self.table.setItem(row, 0, QTableWidgetItem(s.get("name", "")))
+            self.table.setItem(row, 1, QTableWidgetItem(s.get("ip_address", "")))
+            self.table.setItem(row, 2, QTableWidgetItem(s.get("region", "")))
+            self.table.setItem(row, 3, QTableWidgetItem(s.get("map", "")))
+            players = f"{s.get('clients', 0)}/{s.get('maxclients', 0)}"
+            self.table.setItem(row, 4, QTableWidgetItem(players))
+            self.table.setItem(row, 5, QTableWidgetItem(s.get("density", "")))
+            self.table.setItem(row, 6, QTableWidgetItem(s.get("type", "")))
+
+        self.table.resizeColumnsToContents()
+
+    def handle_click(self, row, column):
+        self.try_join_server_by_row(row)
+
+    def join_selected_server(self):
+        row = self.table.currentRow()
+        if row >= 0:
+            self.try_join_server_by_row(row)
+        else:
+            QMessageBox.information(self, "Keine Auswahl", "Bitte zuerst einen Server auswählen.")
+
+    def try_join_server_by_row(self, row):
+        ip_port = self.table.item(row, 1).text()
+        try:
+            ip, port = ip_port.split(":")
+            acmanager_url = f"acmanager://race/online/join?ip={ip}&httpPort={port}&password="
+            os.startfile(acmanager_url)
+        except Exception as e:
+            QMessageBox.warning(self, "Fehler", f"Beitritt fehlgeschlagen:\n{e}")
+
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = ServerBrowser()
+    window.show()
+    sys.exit(app.exec_())
