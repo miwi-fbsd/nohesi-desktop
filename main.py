@@ -244,7 +244,8 @@ class ServerBrowser(QMainWindow):
             fav_item = QTableWidgetItem(fav_mark)
             fav_item.setTextAlignment(Qt.AlignCenter)
             fav_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
-            fav_item.setBackground(QColor("#2b2b2b"))
+            if self.settings.get("theme") == "dark":
+                fav_item.setBackground(QColor("#2b2b2b"))
             self.table.setItem(row, 0, fav_item)
 
             for col, key in enumerate(["name", "ip_address", "region", "map", "clients", "density", "type"], start=1):
@@ -287,24 +288,7 @@ class ServerBrowser(QMainWindow):
             QMessageBox.information(self, "Info", f"Failed to join server:\n{e}")
 
 if __name__ == "__main__":
-    settings = load_settings()
-    if settings.get("theme") == "dark":
-        dark_stylesheet = """
-            QWidget { background-color: #1e1e1e; color: #dddddd; }
-            QComboBox, QLineEdit, QPushButton, QTableWidget, QCheckBox, QLabel {
-                background-color: #2b2b2b;
-                color: #ffffff;
-                border: 1px solid #555555;
-            }
-            QHeaderView::section {
-                background-color: #2b2b2b;
-                color: #ffffff;
-            }
-        """
-        app = QApplication(sys.argv)
-        app.setStyleSheet(dark_stylesheet)
-    else:
-        app = QApplication(sys.argv)
+    app = QApplication(sys.argv)
 
     window = ServerBrowser()
     window.apply_theme()
