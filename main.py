@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
     QAction, QDialog, QDialogButtonBox, QFormLayout
 )
 from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject
+from PyQt5.QtGui import QColor
 
 FAVORITES_FILE = "favorites.json"
 SETTINGS_FILE = "settings.json"
@@ -141,13 +142,9 @@ class ServerBrowser(QMainWindow):
         self.only_favs_checkbox = QCheckBox(self.tr.get("favorites_only", "Only Favorites"))
         self.only_favs_checkbox.stateChanged.connect(self.apply_filters)
 
-        self.filter_layout.addWidget(QLabel(self.tr.get("region", "Region") + ":"))
         self.filter_layout.addWidget(self.region_filter)
-        self.filter_layout.addWidget(QLabel(self.tr.get("traffic", "Traffic") + ":"))
         self.filter_layout.addWidget(self.density_filter)
-        self.filter_layout.addWidget(QLabel(self.tr.get("type", "Typ") + ":"))
         self.filter_layout.addWidget(self.type_filter)
-        self.filter_layout.addWidget(QLabel(self.tr.get("map", "Map") + ":"))
         self.filter_layout.addWidget(self.map_filter)
         self.filter_layout.addWidget(self.sort_checkbox)
         self.filter_layout.addWidget(self.only_favs_checkbox)
@@ -185,11 +182,7 @@ class ServerBrowser(QMainWindow):
             combo.blockSignals(True)
             combo.clear()
 
-        self.region_filter.addItem("All Regions")
-        self.density_filter.addItem("All Traffic")
-        self.type_filter.addItem("All Types")
-        self.map_filter.addItem("All Maps")
-
+        
         regions = sorted(set(s.get("region", "") for s in self.all_servers))
         densities = sorted(set(s.get("density", "") for s in self.all_servers))
         types = sorted(set(s.get("type", "") for s in self.all_servers))
@@ -199,8 +192,9 @@ class ServerBrowser(QMainWindow):
             [regions, densities, types, maps],
             [self.region_filter, self.density_filter, self.type_filter, self.map_filter],
             ["All Regions", "All Traffic", "All Types", "All Maps"]):
+            unique_values = sorted(set(v for v in values if v and v != default_text))
             box.addItem(default_text)
-            for v in sorted(set(values)):
+            for v in unique_values:
                 if v:
                     box.addItem(v)
             box.blockSignals(False)
@@ -250,6 +244,7 @@ class ServerBrowser(QMainWindow):
             fav_item = QTableWidgetItem(fav_mark)
             fav_item.setTextAlignment(Qt.AlignCenter)
             fav_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+            fav_item.setBackground(QColor("#2b2b2b"))
             self.table.setItem(row, 0, fav_item)
 
             for col, key in enumerate(["name", "ip_address", "region", "map", "clients", "density", "type"], start=1):
