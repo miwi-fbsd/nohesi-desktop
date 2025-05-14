@@ -13,8 +13,6 @@ from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject
 
 FAVORITES_FILE = "favorites.json"
 SETTINGS_FILE = "settings.json"
-LOCALES = {"de": "Deutsch", "en": "English"}
-
 
 def load_favorites():
     if os.path.exists(FAVORITES_FILE):
@@ -37,12 +35,7 @@ def save_settings(settings):
         json.dump(settings, f, indent=2)
 
 def load_locale(language_code):
-    try:
-        with open(f"locales/{language_code}.json", "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Fehler beim Laden der Sprachdatei: {e}")
-        return {}
+    return {}
 
 class ServerLoader(QRunnable):
     def __init__(self):
@@ -74,39 +67,7 @@ class WorkerSignals(QObject):
     finished = pyqtSignal(list)
 
 
-class SettingsDialog(QDialog):
-    def __init__(self, parent, current_settings):
-        super().__init__(parent)
-        self.setWindowTitle("Einstellungen")
-        self.setModal(True)
-        self.settings = current_settings.copy()
 
-        layout = QFormLayout()
-
-        self.language_combo = QComboBox()
-        for code, name in LOCALES.items():
-            self.language_combo.addItem(name, code)
-        index = self.language_combo.findData(self.settings.get("language", "de"))
-        self.language_combo.setCurrentIndex(index)
-
-        self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["light", "dark"])
-        self.theme_combo.setCurrentText(self.settings.get("theme", "light"))
-
-        layout.addRow("Sprache:", self.language_combo)
-        layout.addRow("Theme:", self.theme_combo)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        self.setLayout(layout)
-
-    def get_settings(self):
-        return {
-            "language": self.language_combo.currentData(),
-            "theme": self.theme_combo.currentText()
-        }
 
 class ServerBrowser(QMainWindow):
     def apply_theme(self):
@@ -128,28 +89,27 @@ class ServerBrowser(QMainWindow):
             self.setStyleSheet("")
     def init_menu(self):
         menubar = self.menuBar()
-        einstellungen = menubar.addMenu(self.tr.get("settings", "Einstellungen"))
-        action = QAction(self.tr.get("open_settings", "Einstellungen öffnen"), self)
-        action.triggered.connect(self.open_settings_dialog)
-        einstellungen.addAction(action)
+        settings_menu = menubar.addMenu("Settings")
 
-    def open_settings_dialog(self):
-        dialog = SettingsDialog(self, self.settings)
-        if dialog.exec_():
-            self.settings = dialog.get_settings()
-            save_settings(self.settings)
-            self.tr = load_locale(self.settings.get("language", "en"))
-            self.setWindowTitle(self.tr.get("title", "No Hesi Server Browser"))
-            self.init_menu()
-            self.init_filters()
-            self.apply_filters()
-            self.apply_theme()
-            QMessageBox.information(self, self.tr.get("info", "Info"), self.tr.get("settings_saved", "Einstellungen gespeichert. Änderungen übernommen."))
+        theme_menu = settings_menu.addMenu("Theme")
+        light_action = QAction("Light", self)
+        dark_action = QAction("Dark", self)
+
+        light_action.triggered.connect(lambda: self.set_theme("light"))
+        dark_action.triggered.connect(lambda: self.set_theme("dark"))
+
+        theme_menu.addAction(light_action)
+        theme_menu.addAction(dark_action)
+
+    def set_theme(self, theme):
+        self.settings["theme"] = theme
+        save_settings(self.settings)
+        self.apply_theme()
 
     def __init__(self):
         super().__init__()
         self.settings = load_settings()
-        self.tr = load_locale(self.settings.get("language", "de"))
+        self.tr = {}
         self.setWindowTitle(self.tr.get("title", "No Hesi Server Browser"))
         self.init_menu()
         self.resize(1000, 600)
@@ -192,7 +152,7 @@ class ServerBrowser(QMainWindow):
         self.filter_layout.addWidget(self.sort_checkbox)
         self.filter_layout.addWidget(self.only_favs_checkbox)
 
-        self.info_label = QLabel(self.tr.get("loading", "🔄 Loading server data..."))
+        self.info_label = QLabel("🔄 Loading server data...")
         self.table = QTableWidget()
         self.table.cellDoubleClicked.connect(self.handle_click)
 
@@ -209,14 +169,14 @@ class ServerBrowser(QMainWindow):
         self.apply_theme()
 
     def load_all_servers_async(self):
-        self.info_label.setText(self.tr.get("loading", "🔄 Lade Serverdaten..."))
+        self.info_label.setText("🔄 Loading server data...")
         loader = ServerLoader()
         loader.signals.finished.connect(self.on_servers_loaded)
         self.threadpool.start(loader)
 
     def on_servers_loaded(self, servers):
         self.all_servers = servers
-        self.info_label.setText(self.tr.get("loaded", "✅ {count} Server geladen").replace("{count}", str(len(self.all_servers))))
+        self.info_label.setText(f"✅ {len(self.all_servers)} servers loaded")
         self.init_filters()
         self.apply_filters()
 
@@ -225,26 +185,22 @@ class ServerBrowser(QMainWindow):
             combo.blockSignals(True)
             combo.clear()
 
-        self.region_filter.addItem(self.tr.get("all_regions", "Alle Regionen"))
-        self.density_filter.addItem(self.tr.get("all_densities", "Alle Dichten"))
-        self.type_filter.addItem(self.tr.get("all_types", "Alle Typen"))
-        self.map_filter.addItem(self.tr.get("all_maps", "Alle Maps"))
+        self.region_filter.addItem("All Regions")
+        self.density_filter.addItem("All Traffic")
+        self.type_filter.addItem("All Types")
+        self.map_filter.addItem("All Maps")
 
         regions = sorted(set(s.get("region", "") for s in self.all_servers))
         densities = sorted(set(s.get("density", "") for s in self.all_servers))
         types = sorted(set(s.get("type", "") for s in self.all_servers))
         maps = sorted(set(s.get("map", "") for s in self.all_servers))
 
-        for val, (box, default_key) in zip(
+        for values, box, default_text in zip(
             [regions, densities, types, maps],
-            [
-                (self.region_filter, "all_regions"),
-                (self.density_filter, "all_densities"),
-                (self.type_filter, "all_types"),
-                (self.map_filter, "all_maps")
-            ]):
-            box.addItem(self.tr.get(default_key, val[0] if val else ""))
-            for v in val:
+            [self.region_filter, self.density_filter, self.type_filter, self.map_filter],
+            ["All Regions", "All Traffic", "All Types", "All Maps"]):
+            box.addItem(default_text)
+            for v in sorted(set(values)):
                 if v:
                     box.addItem(v)
             box.blockSignals(False)
@@ -259,13 +215,13 @@ class ServerBrowser(QMainWindow):
 
         filtered = self.all_servers
 
-        if region != self.tr.get("all_regions", "Alle Regionen"):
+        if region != "All Regions":
             filtered = [s for s in filtered if s.get("region") == region]
-        if density != self.tr.get("all_densities", "Alle Dichten"):
+        if density != "All Traffic":
             filtered = [s for s in filtered if s.get("density") == density]
-        if server_type != self.tr.get("all_types", "Alle Typen"):
+        if server_type != "All Types":
             filtered = [s for s in filtered if s.get("type") == server_type]
-        if map_val != self.tr.get("all_maps", "Alle Maps"):
+        if map_val != "All Maps":
             filtered = [s for s in filtered if s.get("map") == map_val]
         if only_favs:
             filtered = [s for s in filtered if s.get("ip_address") in self.favorites]
@@ -278,14 +234,14 @@ class ServerBrowser(QMainWindow):
         self.table.setRowCount(len(data))
         self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels([
-            self.tr.get("fav", "★"),
-            self.tr.get("name", "Name"),
-            self.tr.get("ip", "IP"),
-            self.tr.get("region", "Region"),
-            self.tr.get("map", "Map"),
-            self.tr.get("players", "Spieler"),
-            self.tr.get("density", "Density"),
-            self.tr.get("type", "Typ")
+            "★",
+            "Name",
+            "IP",
+            "Region",
+            "Map",
+            "Players",
+            "Traffic",
+            "Type"
         ])
 
         for row, s in enumerate(data):
@@ -324,7 +280,7 @@ class ServerBrowser(QMainWindow):
         if row >= 0:
             self.try_join_server_by_row(row)
         else:
-            QMessageBox.information(self, "Info", self.tr.get("no_selection", "Bitte zuerst einen Server auswählen."))
+            QMessageBox.information(self, "Info", "Please select a server first.")
 
     def try_join_server_by_row(self, row):
         ip_port = self.table.item(row, 2).text()
@@ -333,7 +289,7 @@ class ServerBrowser(QMainWindow):
             acmanager_url = f"acmanager://race/online/join?ip={ip}&httpPort={port}&password="
             os.startfile(acmanager_url)
         except Exception as e:
-            QMessageBox.warning(self, "Fehler", f"Beitritt fehlgeschlagen:\n{e}")
+            QMessageBox.information(self, "Info", f"Failed to join server:\n{e}")
 
 if __name__ == "__main__":
     settings = load_settings()
