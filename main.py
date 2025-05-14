@@ -138,7 +138,7 @@ class ServerBrowser(QMainWindow):
         if dialog.exec_():
             self.settings = dialog.get_settings()
             save_settings(self.settings)
-            self.tr = load_locale(self.settings.get("language", "de"))
+            self.tr = load_locale(self.settings.get("language", "en"))
             self.setWindowTitle(self.tr.get("title", "No Hesi Server Browser"))
             self.init_menu()
             self.init_filters()
