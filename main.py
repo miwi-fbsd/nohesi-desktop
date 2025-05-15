@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QAction, QDialog, QDialogButtonBox, QFormLayout
 )
 from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject, QTimer
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QIcon
 
 def get_appdata_dir():
     appdata = os.getenv("APPDATA")
@@ -155,6 +155,24 @@ class ServerLoader(QRunnable):
 class WorkerSignals(QObject):
     finished = pyqtSignal(list)
 
+class AboutDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("About")
+        layout = QVBoxLayout()
+        label = QLabel(
+            "<b>No Hesi Server Browser</b><br>"
+            "Autor: miwitv<br><br>"
+            "<a style='color:#9147ff;' href='https://twitch.tv/miwiland'>Twitch: twitch.tv/miwiland</a><br>"
+            "<a style='color:#2dba4e;' href='https://github.com/miwi-fbsd/nohesi-desktop'>GitHub: https://github.com/miwi-fbsd/nohesi-desktop</a>"
+        )
+        label.setOpenExternalLinks(True)
+        layout.addWidget(label)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok)
+        btns.accepted.connect(self.accept)
+        layout.addWidget(btns)
+        self.setLayout(layout)
+
 class ServerBrowser(QMainWindow):
     def apply_theme(self):
         if self.settings.get("theme") == "dark":
@@ -194,6 +212,15 @@ class ServerBrowser(QMainWindow):
         dark_action.triggered.connect(lambda: self.set_theme("dark"))
         theme_menu.addAction(light_action)
         theme_menu.addAction(dark_action)
+
+        # About-Menüpunkt jetzt im Settings-Menü
+        about_action = QAction("About", self)
+        about_action.triggered.connect(self.show_about_dialog)
+        settings_menu.addAction(about_action)
+
+    def show_about_dialog(self):
+        dlg = AboutDialog(self)
+        dlg.exec_()
 
     def set_theme(self, theme):
         self.settings["theme"] = theme
@@ -440,8 +467,20 @@ class ServerBrowser(QMainWindow):
                                      self.tr.get("Failed to join server:\n{e}", f"Failed to join server:\n{e}").format(e=e))
 
 if __name__ == "__main__":
+    # Icon-Pfad absolut auflösen (für PyInstaller: sys._MEIPASS prüfen)
+    if hasattr(sys, "_MEIPASS"):
+        base_dir = sys._MEIPASS
+    else:
+        base_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+    icon_path = os.path.join(base_dir, "nohesi.ico")
+
     app = QApplication(sys.argv)
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
     window = ServerBrowser()
+    if os.path.exists(icon_path):
+        window.setWindowIcon(QIcon(icon_path))
     window.apply_theme()
     window.show()
     sys.exit(app.exec_())
+
