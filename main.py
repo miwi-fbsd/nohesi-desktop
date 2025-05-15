@@ -1,4 +1,3 @@
-# main.py (vollständiger, korrigierter Code)
 
 import sys
 import os
