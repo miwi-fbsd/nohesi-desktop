@@ -1,4 +1,3 @@
-
 import sys
 import os
 import json
@@ -66,9 +65,6 @@ class ServerLoader(QRunnable):
 class WorkerSignals(QObject):
     finished = pyqtSignal(list)
 
-
-
-
 class ServerBrowser(QMainWindow):
     def apply_theme(self):
         if self.settings.get("theme") == "dark":
@@ -87,6 +83,7 @@ class ServerBrowser(QMainWindow):
             self.setStyleSheet(dark_stylesheet)
         else:
             self.setStyleSheet("")
+
     def init_menu(self):
         menubar = self.menuBar()
         menubar.setLayoutDirection(Qt.RightToLeft)
@@ -154,13 +151,17 @@ class ServerBrowser(QMainWindow):
         self.info_label.setMovie(self.spinner)
         self.info_label.setVisible(True)
         self.spinner.start()
+
         self.table = QTableWidget()
         self.table.cellDoubleClicked.connect(self.handle_click)
 
         self.join_button = QPushButton(self.tr.get("join_now", "Join Now"))
         self.join_button.clicked.connect(self.join_selected_server)
+        self.join_button.setFixedHeight(40)
+        font = self.join_button.font()
+        font.setPointSize(11)
+        self.join_button.setFont(font)
 
-        # self.layout.addWidget(self.info_label)
         self.layout.addLayout(self.filter_layout)
         self.layout.addWidget(self.info_label)
         self.layout.addWidget(self.table)
@@ -171,7 +172,6 @@ class ServerBrowser(QMainWindow):
         self.apply_theme()
 
     def load_all_servers_async(self):
-        self.info_label.setVisible(True)
         self.info_label.setVisible(True)
         self.spinner.start()
         loader = ServerLoader()
@@ -190,7 +190,6 @@ class ServerBrowser(QMainWindow):
             combo.blockSignals(True)
             combo.clear()
 
-        
         regions = sorted(set(s.get("region", "") for s in self.all_servers))
         densities = sorted(set(s.get("density", "") for s in self.all_servers))
         types = sorted(set(s.get("type", "") for s in self.all_servers))
@@ -236,14 +235,7 @@ class ServerBrowser(QMainWindow):
         self.table.setRowCount(len(data))
         self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels([
-            "★",
-            "Name",
-            "IP",
-            "Region",
-            "Map",
-            "Players",
-            "Traffic",
-            "Type"
+            "★", "Name", "IP", "Region", "Map", "Players", "Traffic", "Type"
         ])
 
         for row, s in enumerate(data):
@@ -297,9 +289,7 @@ class ServerBrowser(QMainWindow):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
     window = ServerBrowser()
     window.apply_theme()
     window.show()
     sys.exit(app.exec_())
-
