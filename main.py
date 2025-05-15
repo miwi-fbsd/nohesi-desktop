@@ -135,6 +135,7 @@ class ServerBrowser(QMainWindow):
         self.sort_checkbox.stateChanged.connect(self.apply_filters)
 
         self.only_favs_checkbox = QCheckBox(self.tr.get("favorites_only", "Only Favorites"))
+        self.only_favs_checkbox.setChecked(True)
         self.only_favs_checkbox.stateChanged.connect(self.apply_filters)
 
         self.filter_layout.addWidget(self.region_filter)
@@ -151,16 +152,15 @@ class ServerBrowser(QMainWindow):
         self.info_label.setMovie(self.spinner)
         self.info_label.setVisible(True)
         self.spinner.start()
-
         self.table = QTableWidget()
         self.table.cellDoubleClicked.connect(self.handle_click)
 
         self.join_button = QPushButton(self.tr.get("join_now", "Join Now"))
-        self.join_button.clicked.connect(self.join_selected_server)
         self.join_button.setFixedHeight(40)
         font = self.join_button.font()
         font.setPointSize(11)
         self.join_button.setFont(font)
+        self.join_button.clicked.connect(self.join_selected_server)
 
         self.layout.addLayout(self.filter_layout)
         self.layout.addWidget(self.info_label)
@@ -168,8 +168,24 @@ class ServerBrowser(QMainWindow):
         self.layout.addWidget(self.join_button)
 
         self.all_servers = []
-        self.load_all_servers_async()
+        self.load_favorite_first_then_all_async()
         self.apply_theme()
+
+    def load_favorite_first_then_all_async(self):
+        if self.favorites:
+            favorite_ip = next(iter(self.favorites))
+            try:
+                url = f"https://hub.nohesi.gg/servers?page=1"
+                response = requests.get(url)
+                response.raise_for_status()
+                data = response.json()
+                servers = data.get("data", {}).get("servers", [])
+                fav_server = [s for s in servers if s.get("ip_address") == favorite_ip]
+                self.all_servers = fav_server
+                self.populate_table(fav_server)
+            except Exception as e:
+                print(f"Fehler beim Laden des Favoritenservers: {e}")
+        self.load_all_servers_async()
 
     def load_all_servers_async(self):
         self.info_label.setVisible(True)
@@ -180,6 +196,7 @@ class ServerBrowser(QMainWindow):
 
     def on_servers_loaded(self, servers):
         self.all_servers = servers
+        self.only_favs_checkbox.setChecked(False)
         self.spinner.stop()
         self.info_label.setVisible(False)
         self.init_filters()
