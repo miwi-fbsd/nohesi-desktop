@@ -24,6 +24,7 @@ exe = EXE(
     [],
     name='nohesi',
     version='version.txt',
+    icon='nohesi.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

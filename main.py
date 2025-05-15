@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
     QAction, QDialog, QDialogButtonBox, QFormLayout
 )
 from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QMovie
 
 FAVORITES_FILE = "favorites.json"
 SETTINGS_FILE = "settings.json"
@@ -89,15 +89,14 @@ class ServerBrowser(QMainWindow):
             self.setStyleSheet("")
     def init_menu(self):
         menubar = self.menuBar()
+        menubar.setLayoutDirection(Qt.RightToLeft)
         settings_menu = menubar.addMenu("Settings")
 
         theme_menu = settings_menu.addMenu("Theme")
         light_action = QAction("Light", self)
         dark_action = QAction("Dark", self)
-
         light_action.triggered.connect(lambda: self.set_theme("light"))
         dark_action.triggered.connect(lambda: self.set_theme("dark"))
-
         theme_menu.addAction(light_action)
         theme_menu.addAction(dark_action)
 
@@ -148,15 +147,22 @@ class ServerBrowser(QMainWindow):
         self.filter_layout.addWidget(self.sort_checkbox)
         self.filter_layout.addWidget(self.only_favs_checkbox)
 
-        self.info_label = QLabel("🔄 Loading server data...")
+        self.info_label = QLabel()
+        self.info_label.setAlignment(Qt.AlignCenter)
+        gif_path = "loading_purple.gif"
+        self.spinner = QMovie(gif_path)
+        self.info_label.setMovie(self.spinner)
+        self.info_label.setVisible(True)
+        self.spinner.start()
         self.table = QTableWidget()
         self.table.cellDoubleClicked.connect(self.handle_click)
 
         self.join_button = QPushButton(self.tr.get("join_now", "Join Now"))
         self.join_button.clicked.connect(self.join_selected_server)
 
-        self.layout.addWidget(self.info_label)
+        # self.layout.addWidget(self.info_label)
         self.layout.addLayout(self.filter_layout)
+        self.layout.addWidget(self.info_label)
         self.layout.addWidget(self.table)
         self.layout.addWidget(self.join_button)
 
@@ -165,14 +171,17 @@ class ServerBrowser(QMainWindow):
         self.apply_theme()
 
     def load_all_servers_async(self):
-        self.info_label.setText("🔄 Loading server data...")
+        self.info_label.setVisible(True)
+        self.info_label.setVisible(True)
+        self.spinner.start()
         loader = ServerLoader()
         loader.signals.finished.connect(self.on_servers_loaded)
         self.threadpool.start(loader)
 
     def on_servers_loaded(self, servers):
         self.all_servers = servers
-        self.info_label.setText(f"✅ {len(self.all_servers)} servers loaded")
+        self.spinner.stop()
+        self.info_label.setVisible(False)
         self.init_filters()
         self.apply_filters()
 
