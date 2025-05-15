@@ -24,6 +24,7 @@ APPDATA_DIR = get_appdata_dir()
 SETTINGS_FILE = os.path.join(APPDATA_DIR, "settings.json")
 FAVORITES_FILE = os.path.join(APPDATA_DIR, "favorites.json")
 SERVERS_FILE = os.path.join(APPDATA_DIR, "servers.json")
+CARS_FILE = os.path.join(APPDATA_DIR, "cars.json")
 
 def load_favorites():
     try:
@@ -124,6 +125,65 @@ def load_locale(language_code):
             "loading_servers": "Updating server list ..."
         }
     return {}
+
+def load_cars_json(filepath_or_url):
+    """
+    Lädt die Car-Liste aus einer lokalen Datei oder URL.
+    Gibt eine Liste von Car-Modelnamen zurück.
+    """
+    try:
+        if filepath_or_url.startswith("http"):
+            resp = requests.get(filepath_or_url)
+            if resp.status_code == 200 and resp.content:
+                try:
+                    data = resp.json()
+                except Exception as e:
+                    print(f"Fehler beim Parsen der Car-JSON: {e}")
+                    return []
+                # Speichere die Car-JSON lokal für Offline-Nutzung
+                with open(CARS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+            else:
+                print(f"Fehler beim Laden der Car-Liste: HTTP {resp.status_code}")
+                return []
+        else:
+            with open(filepath_or_url, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        return [car["model"] for car in data.get("data", []) if car.get("available", True)]
+    except Exception as e:
+        print(f"Fehler beim Laden der Car-Liste: {e}")
+        return []
+
+def get_servers_for_car(car_model, tier=None):
+    """
+    Holt die Serverliste für ein bestimmtes Auto und Tier von der API.
+    Wenn kein Tier angegeben ist, wird das niedrigste verfügbare Tier aus der Car-JSON verwendet.
+    """
+    try:
+        # Lade die Car-Liste lokal
+        if os.path.exists(CARS_FILE):
+            with open(CARS_FILE, "r", encoding="utf-8") as f:
+                cars_data = json.load(f)
+            car_entry = next((c for c in cars_data.get("data", []) if c["model"] == car_model), None)
+            if car_entry and car_entry.get("tier"):
+                # Nimm das niedrigste Tier, falls nicht explizit gesetzt
+                tier_keys = sorted(int(k) for k in car_entry["tier"].keys())
+                tier = tier_keys[0] if tier is None else tier
+            else:
+                tier = 0
+        else:
+            tier = 0
+
+        car_query = f"{car_model}|{tier}"
+        url = f"https://hub.nohesi.gg/servers?car={car_query}"
+        print(f"[DEBUG] Car-API-Call: {url}")  # Debug-Ausgabe
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("data", {}).get("servers", [])
+    except Exception as e:
+        print(f"Fehler beim Car-Server-API-Call: {e}")
+        return []
 
 class ServerLoader(QRunnable):
     def __init__(self):
@@ -242,7 +302,7 @@ class ServerBrowser(QMainWindow):
             "★", self.tr.get("Name", "Name"), self.tr.get("IP", "IP"),
             self.tr.get("Region", "Region"), self.tr.get("Map", "Map"),
             self.tr.get("Players", "Players"), self.tr.get("Traffic", "Traffic"),
-            self.tr.get("Type", "Type")
+            self.tr.get("Type", "Type"), "Tier", "VIP"
         ])
         self.init_filters()
         self.menuBar().clear()
@@ -277,6 +337,10 @@ class ServerBrowser(QMainWindow):
         self.map_filter = QComboBox()
         self.map_filter.currentTextChanged.connect(self.on_filter_change)
 
+        self.car_filter = QComboBox()
+        self.car_filter.addItem("All Cars")
+        self.car_filter.currentTextChanged.connect(self.on_filter_change)
+
         self.sort_checkbox = QCheckBox(self.tr.get("most_played", "Sort by Most Played"))
         self.sort_checkbox.stateChanged.connect(self.apply_filters)
 
@@ -288,6 +352,7 @@ class ServerBrowser(QMainWindow):
         self.filter_layout.addWidget(self.density_filter)
         self.filter_layout.addWidget(self.type_filter)
         self.filter_layout.addWidget(self.map_filter)
+        self.filter_layout.addWidget(self.car_filter)  # Car-Filter hinzufügen
         self.filter_layout.addWidget(self.sort_checkbox)
         self.filter_layout.addWidget(self.only_favs_checkbox)
 
@@ -311,6 +376,9 @@ class ServerBrowser(QMainWindow):
         self.layout.addWidget(self.info_label)  # Info-Label jetzt unter Join Now
 
         self.all_servers = load_servers_cache()
+        self.cars_list = load_cars_json("https://hub.nohesi.gg/servers/cars")
+        for car in sorted(self.cars_list):
+            self.car_filter.addItem(car)
         self.init_filters()
         self.apply_filters()
         self.apply_theme()
@@ -372,6 +440,16 @@ class ServerBrowser(QMainWindow):
         self.type_filter.setCurrentText(self.settings.get("last_type", self.tr.get("All Types", "All Types")))
         self.map_filter.setCurrentText(self.settings.get("last_map", self.tr.get("All Maps", "All Maps")))
 
+        # Car-Filter aktualisieren
+        current_car = self.car_filter.currentText()
+        self.car_filter.blockSignals(True)
+        self.car_filter.clear()
+        self.car_filter.addItem("All Cars")
+        for car in sorted(self.cars_list):
+            self.car_filter.addItem(car)
+        self.car_filter.setCurrentText(current_car if current_car in self.cars_list else "All Cars")
+        self.car_filter.blockSignals(False)
+
         # Favoriten-Checkbox initialisieren:
         if self.favorites:
             self.only_favs_checkbox.setChecked(True)
@@ -395,6 +473,7 @@ class ServerBrowser(QMainWindow):
         density = self.density_filter.currentText()
         server_type = self.type_filter.currentText()
         map_val = self.map_filter.currentText()
+        car_model = self.car_filter.currentText()
         sort_by_players = self.sort_checkbox.isChecked()
 
         # Favoriten-Logik: Nur wenn Favoriten vorhanden sind, Checkbox aktiv lassen
@@ -404,7 +483,12 @@ class ServerBrowser(QMainWindow):
             only_favs = False
             self.only_favs_checkbox.setChecked(False)
 
-        filtered = self.all_servers
+        # Car-Filter: Hole Server direkt von der API, wenn ein Auto gewählt ist
+        if car_model != "All Cars":
+            print(f"[DEBUG] apply_filters: car_model={car_model}")  # Debug-Ausgabe
+            filtered = get_servers_for_car(car_model, tier=None)  # tier=None, damit das niedrigste Tier gewählt wird
+        else:
+            filtered = self.all_servers
 
         if region != self.tr.get("All Regions", "All Regions"):
             filtered = [s for s in filtered if s.get("region") == region]
@@ -422,13 +506,14 @@ class ServerBrowser(QMainWindow):
         self.populate_table(filtered)
 
     def populate_table(self, data):
+        # Neue Spalte für VIP-Slots einfügen (insgesamt 10 Spalten)
         self.table.setRowCount(len(data))
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
             "★", self.tr.get("Name", "Name"), self.tr.get("IP", "IP"),
             self.tr.get("Region", "Region"), self.tr.get("Map", "Map"),
             self.tr.get("Players", "Players"), self.tr.get("Traffic", "Traffic"),
-            self.tr.get("Type", "Type")
+            self.tr.get("Type", "Type"), "Tier", "VIP"
         ])
 
         for row, s in enumerate(data):
@@ -441,6 +526,7 @@ class ServerBrowser(QMainWindow):
                 fav_item.setBackground(QColor("#2b2b2b"))
             self.table.setItem(row, 0, fav_item)
 
+            # Standardspalten
             for col, key in enumerate(["name", "ip_address", "region", "map", "clients", "density", "type"], start=1):
                 if key == "clients":
                     text = f"{s.get('clients', 0)}/{s.get('maxclients', 0)}"
@@ -449,6 +535,26 @@ class ServerBrowser(QMainWindow):
                 item = QTableWidgetItem(text)
                 item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
                 self.table.setItem(row, col, item)
+
+            # Tier-Spalte (Spalte 8)
+            tier_value = ""
+            if "type" in s and isinstance(s["type"], str) and s["type"].lower().startswith("tier"):
+                tier_value = s["type"].replace("Tier", "")
+            elif "tier3_cars" in s:
+                tier_value = "3"
+            else:
+                tier_value = ""
+            tier_item = QTableWidgetItem(str(tier_value))
+            tier_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+            self.table.setItem(row, 8, tier_item)
+
+            # VIP-Slots-Spalte (Spalte 9)
+            vip = s.get("vip_slots", 0)
+            max_vip = s.get("max_vip_slots", 0)
+            vip_text = f"{vip}/{max_vip}" if max_vip else str(vip)
+            vip_item = QTableWidgetItem(vip_text)
+            vip_item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
+            self.table.setItem(row, 9, vip_item)
 
         self.table.resizeColumnsToContents()
 
