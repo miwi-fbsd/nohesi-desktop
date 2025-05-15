@@ -372,11 +372,21 @@ class ServerBrowser(QMainWindow):
         self.type_filter.setCurrentText(self.settings.get("last_type", self.tr.get("All Types", "All Types")))
         self.map_filter.setCurrentText(self.settings.get("last_map", self.tr.get("All Maps", "All Maps")))
 
+        # Favoriten-Checkbox initialisieren:
+        if self.favorites:
+            self.only_favs_checkbox.setChecked(True)
+        else:
+            # Wenn keine Favoriten, dann letzte Einstellung oder Default
+            last_checked = self.settings.get("only_favs_checked", False)
+            self.only_favs_checkbox.setChecked(last_checked)
+
     def on_filter_change(self):
         self.settings["last_region"] = self.region_filter.currentText()
         self.settings["last_density"] = self.density_filter.currentText()
         self.settings["last_type"] = self.type_filter.currentText()
         self.settings["last_map"] = self.map_filter.currentText()
+        # Speichere auch den Zustand der Favoriten-Checkbox
+        self.settings["only_favs_checked"] = self.only_favs_checkbox.isChecked()
         save_settings(self.settings)
         self.apply_filters()
 
@@ -386,7 +396,13 @@ class ServerBrowser(QMainWindow):
         server_type = self.type_filter.currentText()
         map_val = self.map_filter.currentText()
         sort_by_players = self.sort_checkbox.isChecked()
-        only_favs = self.only_favs_checkbox.isChecked()
+
+        # Favoriten-Logik: Nur wenn Favoriten vorhanden sind, Checkbox aktiv lassen
+        if self.favorites:
+            only_favs = self.only_favs_checkbox.isChecked()
+        else:
+            only_favs = False
+            self.only_favs_checkbox.setChecked(False)
 
         filtered = self.all_servers
 
