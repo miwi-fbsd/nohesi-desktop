@@ -2,13 +2,14 @@ import sys
 import os
 import json
 import requests
+import time
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QComboBox, QTableWidget, QTableWidgetItem,
     QLabel, QMainWindow, QPushButton, QMessageBox, QHBoxLayout, QCheckBox,
     QAction, QDialog, QDialogButtonBox, QFormLayout
 )
-from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject
-from PyQt5.QtGui import QColor, QMovie
+from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject, QTimer
+from PyQt5.QtGui import QColor
 
 def get_appdata_dir():
     appdata = os.getenv("APPDATA")
@@ -92,7 +93,8 @@ def load_locale(language_code):
             "Map": "Karte",
             "Players": "Spieler",
             "Traffic": "Verkehr",
-            "Type": "Typ"
+            "Type": "Typ",
+            "loading_servers": "Server werden aktualisiert ..."
         }
     elif language_code == "en":
         return {
@@ -118,7 +120,8 @@ def load_locale(language_code):
             "Map": "Map",
             "Players": "Players",
             "Traffic": "Traffic",
-            "Type": "Type"
+            "Type": "Type",
+            "loading_servers": "Updating server list ..."
         }
     return {}
 
@@ -263,10 +266,8 @@ class ServerBrowser(QMainWindow):
 
         self.info_label = QLabel()
         self.info_label.setAlignment(Qt.AlignCenter)
-        gif_path = "loading_purple.gif"
-        self.spinner = QMovie(gif_path)
-        self.info_label.setMovie(self.spinner)
         self.info_label.setVisible(False)
+
         self.table = QTableWidget()
         self.table.cellDoubleClicked.connect(self.handle_click)
 
@@ -278,9 +279,9 @@ class ServerBrowser(QMainWindow):
         self.join_button.clicked.connect(self.join_selected_server)
 
         self.layout.addLayout(self.filter_layout)
-        self.layout.addWidget(self.info_label)
         self.layout.addWidget(self.table)
         self.layout.addWidget(self.join_button)
+        self.layout.addWidget(self.info_label)  # Info-Label jetzt unter Join Now
 
         self.all_servers = load_servers_cache()
         self.init_filters()
@@ -290,17 +291,26 @@ class ServerBrowser(QMainWindow):
         self.load_all_servers_async()
 
     def load_all_servers_async(self):
+        loading_text = self.tr.get("loading_servers", "Server werden aktualisiert ...")
+        self.info_label.setText(loading_text)
         self.info_label.setVisible(True)
-        self.spinner.start()
+        self._load_start_time = time.time()
         loader = ServerLoader()
         loader.signals.finished.connect(self.on_servers_loaded)
         self.threadpool.start(loader)
 
     def on_servers_loaded(self, servers):
+        elapsed = time.time() - getattr(self, "_load_start_time", time.time())
+        count = len(servers)
+        if self.tr.get("language", "en") == "de":
+            info = f"Server aktualisiert: {count} Server, Dauer: {elapsed:.2f} Sekunden"
+        else:
+            info = f"Servers updated: {count} servers, took {elapsed:.2f} seconds"
         self.all_servers = servers
         self.only_favs_checkbox.setChecked(False)
-        self.spinner.stop()
-        self.info_label.setVisible(False)
+        self.info_label.setText(info)
+        self.info_label.setVisible(True)
+        QTimer.singleShot(3500, lambda: self.info_label.setVisible(False))
         self.init_filters()
         self.apply_filters()
 
