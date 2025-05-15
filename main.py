@@ -34,6 +34,58 @@ def save_settings(settings):
         json.dump(settings, f, indent=2)
 
 def load_locale(language_code):
+    if language_code == "de":
+        return {
+            "title": "No Hesi Server Browser",
+            "Settings": "Einstellungen",
+            "Theme": "Design",
+            "Light": "Hell",
+            "Dark": "Dunkel",
+            "most_played": "Nach Spielern sortieren",
+            "favorites_only": "Nur Favoriten",
+            "join_now": "Jetzt beitreten",
+            "All Regions": "Alle Regionen",
+            "All Traffic": "Alle Verkehrsdichten",
+            "All Types": "Alle Typen",
+            "All Maps": "Alle Karten",
+            "Info": "Info",
+            "Please select a server first.": "Bitte zuerst einen Server auswählen.",
+            "Failed to join server:\n{e}": "Beitritt zum Server fehlgeschlagen:\n{e}",
+            "Language": "Sprache",
+            "Name": "Name",
+            "IP": "IP",
+            "Region": "Region",
+            "Map": "Karte",
+            "Players": "Spieler",
+            "Traffic": "Verkehr",
+            "Type": "Typ"
+        }
+    elif language_code == "en":
+        return {
+            "title": "No Hesi Server Browser",
+            "Settings": "Settings",
+            "Theme": "Theme",
+            "Light": "Light",
+            "Dark": "Dark",
+            "most_played": "Sort by Most Played",
+            "favorites_only": "Only Favorites",
+            "join_now": "Join Now",
+            "All Regions": "All Regions",
+            "All Traffic": "All Traffic",
+            "All Types": "All Types",
+            "All Maps": "All Maps",
+            "Info": "Info",
+            "Please select a server first.": "Please select a server first.",
+            "Failed to join server:\n{e}": "Failed to join server:\n{e}",
+            "Language": "Language",
+            "Name": "Name",
+            "IP": "IP",
+            "Region": "Region",
+            "Map": "Map",
+            "Players": "Players",
+            "Traffic": "Traffic",
+            "Type": "Type"
+        }
     return {}
 
 class ServerLoader(QRunnable):
@@ -87,11 +139,19 @@ class ServerBrowser(QMainWindow):
     def init_menu(self):
         menubar = self.menuBar()
         menubar.setLayoutDirection(Qt.RightToLeft)
-        settings_menu = menubar.addMenu("Settings")
+        settings_menu = menubar.addMenu(self.tr.get("Settings", "Settings"))
 
-        theme_menu = settings_menu.addMenu("Theme")
-        light_action = QAction("Light", self)
-        dark_action = QAction("Dark", self)
+        language_menu = settings_menu.addMenu(self.tr.get("Language", "Language"))
+        lang_en = QAction("English", self)
+        lang_de = QAction("Deutsch", self)
+        lang_en.triggered.connect(lambda: self.set_language("en"))
+        lang_de.triggered.connect(lambda: self.set_language("de"))
+        language_menu.addAction(lang_en)
+        language_menu.addAction(lang_de)
+
+        theme_menu = settings_menu.addMenu(self.tr.get("Theme", "Theme"))
+        light_action = QAction(self.tr.get("Light", "Light"), self)
+        dark_action = QAction(self.tr.get("Dark", "Dark"), self)
         light_action.triggered.connect(lambda: self.set_theme("light"))
         dark_action.triggered.connect(lambda: self.set_theme("dark"))
         theme_menu.addAction(light_action)
@@ -102,10 +162,31 @@ class ServerBrowser(QMainWindow):
         save_settings(self.settings)
         self.apply_theme()
 
+    def set_language(self, lang):
+        self.settings["language"] = lang
+        save_settings(self.settings)
+        self.tr = load_locale(lang)
+        self.update_ui_texts()
+
+    def update_ui_texts(self):
+        self.setWindowTitle(self.tr.get("title", "No Hesi Server Browser"))
+        self.sort_checkbox.setText(self.tr.get("most_played", "Sort by Most Played"))
+        self.only_favs_checkbox.setText(self.tr.get("favorites_only", "Only Favorites"))
+        self.join_button.setText(self.tr.get("join_now", "Join Now"))
+        self.table.setHorizontalHeaderLabels([
+            "★", self.tr.get("Name", "Name"), self.tr.get("IP", "IP"),
+            self.tr.get("Region", "Region"), self.tr.get("Map", "Map"),
+            self.tr.get("Players", "Players"), self.tr.get("Traffic", "Traffic"),
+            self.tr.get("Type", "Type")
+        ])
+        self.init_filters()
+        self.menuBar().clear()
+        self.init_menu()
+
     def __init__(self):
         super().__init__()
         self.settings = load_settings()
-        self.tr = {}
+        self.tr = load_locale(self.settings.get("language", "en"))
         self.setWindowTitle(self.tr.get("title", "No Hesi Server Browser"))
         self.init_menu()
         self.resize(1000, 600)
@@ -203,25 +284,29 @@ class ServerBrowser(QMainWindow):
         self.apply_filters()
 
     def init_filters(self):
-        for combo in [self.region_filter, self.density_filter, self.type_filter, self.map_filter]:
+        for combo, default_text in zip(
+            [self.region_filter, self.density_filter, self.type_filter, self.map_filter],
+            [self.tr.get("All Regions", "All Regions"), self.tr.get("All Traffic", "All Traffic"),
+             self.tr.get("All Types", "All Types"), self.tr.get("All Maps", "All Maps")]
+        ):
             combo.blockSignals(True)
             combo.clear()
+            combo.addItem(default_text)
+            combo.blockSignals(False)
 
         regions = sorted(set(s.get("region", "") for s in self.all_servers))
         densities = sorted(set(s.get("density", "") for s in self.all_servers))
         types = sorted(set(s.get("type", "") for s in self.all_servers))
         maps = sorted(set(s.get("map", "") for s in self.all_servers))
 
-        for values, box, default_text in zip(
+        for values, box in zip(
             [regions, densities, types, maps],
-            [self.region_filter, self.density_filter, self.type_filter, self.map_filter],
-            ["All Regions", "All Traffic", "All Types", "All Maps"]):
-            unique_values = sorted(set(v for v in values if v and v != default_text))
-            box.addItem(default_text)
+            [self.region_filter, self.density_filter, self.type_filter, self.map_filter]
+        ):
+            unique_values = sorted(set(v for v in values if v))
             for v in unique_values:
                 if v:
                     box.addItem(v)
-            box.blockSignals(False)
 
     def apply_filters(self):
         region = self.region_filter.currentText()
@@ -233,13 +318,13 @@ class ServerBrowser(QMainWindow):
 
         filtered = self.all_servers
 
-        if region != "All Regions":
+        if region != self.tr.get("All Regions", "All Regions"):
             filtered = [s for s in filtered if s.get("region") == region]
-        if density != "All Traffic":
+        if density != self.tr.get("All Traffic", "All Traffic"):
             filtered = [s for s in filtered if s.get("density") == density]
-        if server_type != "All Types":
+        if server_type != self.tr.get("All Types", "All Types"):
             filtered = [s for s in filtered if s.get("type") == server_type]
-        if map_val != "All Maps":
+        if map_val != self.tr.get("All Maps", "All Maps"):
             filtered = [s for s in filtered if s.get("map") == map_val]
         if only_favs:
             filtered = [s for s in filtered if s.get("ip_address") in self.favorites]
@@ -252,7 +337,10 @@ class ServerBrowser(QMainWindow):
         self.table.setRowCount(len(data))
         self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels([
-            "★", "Name", "IP", "Region", "Map", "Players", "Traffic", "Type"
+            "★", self.tr.get("Name", "Name"), self.tr.get("IP", "IP"),
+            self.tr.get("Region", "Region"), self.tr.get("Map", "Map"),
+            self.tr.get("Players", "Players"), self.tr.get("Traffic", "Traffic"),
+            self.tr.get("Type", "Type")
         ])
 
         for row, s in enumerate(data):
@@ -293,7 +381,8 @@ class ServerBrowser(QMainWindow):
         if row >= 0:
             self.try_join_server_by_row(row)
         else:
-            QMessageBox.information(self, "Info", "Please select a server first.")
+            QMessageBox.information(self, self.tr.get("Info", "Info"),
+                                     self.tr.get("Please select a server first.", "Please select a server first."))
 
     def try_join_server_by_row(self, row):
         ip_port = self.table.item(row, 2).text()
@@ -302,7 +391,8 @@ class ServerBrowser(QMainWindow):
             acmanager_url = f"acmanager://race/online/join?ip={ip}&httpPort={port}&password="
             os.startfile(acmanager_url)
         except Exception as e:
-            QMessageBox.information(self, "Info", f"Failed to join server:\n{e}")
+            QMessageBox.information(self, self.tr.get("Info", "Info"),
+                                     self.tr.get("Failed to join server:\n{e}", f"Failed to join server:\n{e}").format(e=e))
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
