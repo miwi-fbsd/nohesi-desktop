@@ -22,16 +22,30 @@ def get_appdata_dir():
 APPDATA_DIR = get_appdata_dir()
 SETTINGS_FILE = os.path.join(APPDATA_DIR, "settings.json")
 FAVORITES_FILE = os.path.join(APPDATA_DIR, "favorites.json")
+SERVERS_FILE = os.path.join(APPDATA_DIR, "servers.json")
 
 def load_favorites():
-    if os.path.exists(FAVORITES_FILE):
-        with open(FAVORITES_FILE, "r") as f:
-            return set(json.load(f))
+    try:
+        if os.path.exists(FAVORITES_FILE):
+            with open(FAVORITES_FILE, "r") as f:
+                data = json.load(f)
+                # Akzeptiere Listen und Strings (falls versehentlich ein einzelner Favorit gespeichert wurde)
+                if isinstance(data, list):
+                    return set(data)
+                elif isinstance(data, str):
+                    return {data}
+                else:
+                    return set()
+    except Exception as e:
+        print(f"Fehler beim Laden der Favoriten: {e}")
     return set()
 
 def save_favorites(favs):
-    with open(FAVORITES_FILE, "w") as f:
-        json.dump(list(favs), f)
+    try:
+        with open(FAVORITES_FILE, "w") as f:
+            json.dump(list(favs), f)
+    except Exception as e:
+        print(f"Fehler beim Speichern der Favoriten: {e}")
 
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
@@ -42,6 +56,16 @@ def load_settings():
 def save_settings(settings):
     with open(SETTINGS_FILE, "w") as f:
         json.dump(settings, f, indent=2)
+
+def load_servers_cache():
+    if os.path.exists(SERVERS_FILE):
+        with open(SERVERS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+def save_servers_cache(servers):
+    with open(SERVERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(servers, f, indent=2, ensure_ascii=False)
 
 def load_locale(language_code):
     if language_code == "de":
@@ -122,6 +146,7 @@ class ServerLoader(QRunnable):
             except Exception as e:
                 print(f"Fehler auf Seite {page}: {e}")
                 break
+        save_servers_cache(all_servers)
         self.signals.finished.emit(all_servers)
 
 class WorkerSignals(QObject):
@@ -211,16 +236,16 @@ class ServerBrowser(QMainWindow):
         self.filter_layout = QHBoxLayout()
 
         self.region_filter = QComboBox()
-        self.region_filter.currentTextChanged.connect(self.apply_filters)
+        self.region_filter.currentTextChanged.connect(self.on_filter_change)
 
         self.density_filter = QComboBox()
-        self.density_filter.currentTextChanged.connect(self.apply_filters)
+        self.density_filter.currentTextChanged.connect(self.on_filter_change)
 
         self.type_filter = QComboBox()
-        self.type_filter.currentTextChanged.connect(self.apply_filters)
+        self.type_filter.currentTextChanged.connect(self.on_filter_change)
 
         self.map_filter = QComboBox()
-        self.map_filter.currentTextChanged.connect(self.apply_filters)
+        self.map_filter.currentTextChanged.connect(self.on_filter_change)
 
         self.sort_checkbox = QCheckBox(self.tr.get("most_played", "Sort by Most Played"))
         self.sort_checkbox.stateChanged.connect(self.apply_filters)
@@ -241,8 +266,7 @@ class ServerBrowser(QMainWindow):
         gif_path = "loading_purple.gif"
         self.spinner = QMovie(gif_path)
         self.info_label.setMovie(self.spinner)
-        self.info_label.setVisible(True)
-        self.spinner.start()
+        self.info_label.setVisible(False)
         self.table = QTableWidget()
         self.table.cellDoubleClicked.connect(self.handle_click)
 
@@ -258,24 +282,11 @@ class ServerBrowser(QMainWindow):
         self.layout.addWidget(self.table)
         self.layout.addWidget(self.join_button)
 
-        self.all_servers = []
-        self.load_favorite_first_then_all_async()
+        self.all_servers = load_servers_cache()
+        self.init_filters()
+        self.apply_filters()
         self.apply_theme()
 
-    def load_favorite_first_then_all_async(self):
-        if self.favorites:
-            favorite_ip = next(iter(self.favorites))
-            try:
-                url = f"https://hub.nohesi.gg/servers?page=1"
-                response = requests.get(url)
-                response.raise_for_status()
-                data = response.json()
-                servers = data.get("data", {}).get("servers", [])
-                fav_server = [s for s in servers if s.get("ip_address") == favorite_ip]
-                self.all_servers = fav_server
-                self.populate_table(fav_server)
-            except Exception as e:
-                print(f"Fehler beim Laden des Favoritenservers: {e}")
         self.load_all_servers_async()
 
     def load_all_servers_async(self):
@@ -294,10 +305,11 @@ class ServerBrowser(QMainWindow):
         self.apply_filters()
 
     def init_filters(self):
-        for combo, default_text in zip(
+        for combo, default_text, setting_key in zip(
             [self.region_filter, self.density_filter, self.type_filter, self.map_filter],
             [self.tr.get("All Regions", "All Regions"), self.tr.get("All Traffic", "All Traffic"),
-             self.tr.get("All Types", "All Types"), self.tr.get("All Maps", "All Maps")]
+             self.tr.get("All Types", "All Types"), self.tr.get("All Maps", "All Maps")],
+            ["last_region", "last_density", "last_type", "last_map"]
         ):
             combo.blockSignals(True)
             combo.clear()
@@ -317,6 +329,19 @@ class ServerBrowser(QMainWindow):
             for v in unique_values:
                 if v:
                     box.addItem(v)
+
+        self.region_filter.setCurrentText(self.settings.get("last_region", self.tr.get("All Regions", "All Regions")))
+        self.density_filter.setCurrentText(self.settings.get("last_density", self.tr.get("All Traffic", "All Traffic")))
+        self.type_filter.setCurrentText(self.settings.get("last_type", self.tr.get("All Types", "All Types")))
+        self.map_filter.setCurrentText(self.settings.get("last_map", self.tr.get("All Maps", "All Maps")))
+
+    def on_filter_change(self):
+        self.settings["last_region"] = self.region_filter.currentText()
+        self.settings["last_density"] = self.density_filter.currentText()
+        self.settings["last_type"] = self.type_filter.currentText()
+        self.settings["last_map"] = self.map_filter.currentText()
+        save_settings(self.settings)
+        self.apply_filters()
 
     def apply_filters(self):
         region = self.region_filter.currentText()
