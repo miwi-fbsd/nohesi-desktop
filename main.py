@@ -10,8 +10,18 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject
 from PyQt5.QtGui import QColor, QMovie
 
-FAVORITES_FILE = "favorites.json"
-SETTINGS_FILE = "settings.json"
+def get_appdata_dir():
+    appdata = os.getenv("APPDATA")
+    if appdata:
+        path = os.path.join(appdata, "nohesi-desktop")
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+        return path
+    raise RuntimeError("APPDATA not found")
+
+APPDATA_DIR = get_appdata_dir()
+SETTINGS_FILE = os.path.join(APPDATA_DIR, "settings.json")
+FAVORITES_FILE = os.path.join(APPDATA_DIR, "favorites.json")
 
 def load_favorites():
     if os.path.exists(FAVORITES_FILE):
