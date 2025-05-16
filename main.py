@@ -448,15 +448,15 @@ class ServerBrowser(QMainWindow):
         theme_menu.addAction(light_action)
         theme_menu.addAction(dark_action)
 
-        # Freundesliste-Menüpunkt
-        friends_action = QAction(self.tr.get("friends", "Friends"), self)
-        friends_action.triggered.connect(self.show_friends_dialog)
-        settings_menu.addAction(friends_action)
-
         # About-Menüpunkt jetzt im Settings-Menü
         about_action = QAction("About", self)
         about_action.triggered.connect(self.show_about_dialog)
         settings_menu.addAction(about_action)
+
+          # Freunde-Menüeintrag direkt ohne Untermenü
+        friends_action = QAction(self.tr.get("friends", "Friends"), self)
+        friends_action.triggered.connect(self.show_friends_dialog)
+        menubar.addAction(friends_action)
 
     def show_about_dialog(self):
         dlg = AboutDialog(self)
