@@ -98,7 +98,8 @@ def load_locale(language_code):
             "Type": "Typ",
             "loading_servers": "Server werden aktualisiert ...",
             "Link copied:\n{link}": "Link kopiert:\n{link}",
-            "Failed to copy link:\n{e}": "Fehler beim Kopieren des Links:\n{e}"
+            "Failed to copy link:\n{e}": "Fehler beim Kopieren des Links:\n{e}",
+            "Copy server link": "Server-Link kopieren"
         }
     elif language_code == "en":
         return {
@@ -127,7 +128,8 @@ def load_locale(language_code):
             "Type": "Type",
             "loading_servers": "Updating server list ...",
             "Link copied:\n{link}": "Link copied:\n{link}",
-            "Failed to copy link:\n{e}": "Failed to copy link:\n{e}"
+            "Failed to copy link:\n{e}": "Failed to copy link:\n{e}",
+            "Copy server link": "Copy server link"
         }
     return {}
 
@@ -366,6 +368,8 @@ class ServerBrowser(QMainWindow):
 
         self.table = QTableWidget()
         self.table.cellDoubleClicked.connect(self.handle_click)
+        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.show_table_context_menu)
 
         self.join_button = QPushButton(self.tr.get("join_now", "Join Now"))
         self.join_button.setFixedHeight(40)
@@ -374,12 +378,7 @@ class ServerBrowser(QMainWindow):
         self.join_button.setFont(font)
         self.join_button.clicked.connect(self.join_selected_server)
 
-        self.copy_link_button = QPushButton("Server-Link kopieren")
-        self.copy_link_button.setFixedHeight(32)
-        self.copy_link_button.clicked.connect(self.copy_selected_server_link)
-
         self.layout.addLayout(self.filter_layout)
-        self.layout.addWidget(self.copy_link_button)  # Button unter die Filter
         self.layout.addWidget(self.table)
         self.layout.addWidget(self.join_button)
         self.layout.addWidget(self.info_label)  # Info-Label jetzt unter Join Now
@@ -597,11 +596,20 @@ class ServerBrowser(QMainWindow):
             QMessageBox.information(self, self.tr.get("Info", "Info"),
                                      self.tr.get("Failed to join server:\n{e}", f"Failed to join server:\n{e}").format(e=e))
 
-    def copy_selected_server_link(self):
-        row = self.table.currentRow()
+    def show_table_context_menu(self, pos):
+        index = self.table.indexAt(pos)
+        if not index.isValid():
+            return
+        menu = QtWidgets.QMenu(self)
+        copy_action = menu.addAction(self.tr.get("Copy server link", "Copy server link"))
+        action = menu.exec_(self.table.viewport().mapToGlobal(pos))
+        if action == copy_action:
+            self.copy_selected_server_link(row=index.row())
+
+    def copy_selected_server_link(self, row=None):
+        if row is None:
+            row = self.table.currentRow()
         if row < 0:
-            msg = self.tr.get("Please select a server first.", "Please select a server first.")
-            QMessageBox.information(self, self.tr.get("Info", "Info"), msg)
             return
         ip_port = self.table.item(row, 2).text()
         try:
@@ -609,11 +617,8 @@ class ServerBrowser(QMainWindow):
             link = f"https://acstuff.club/s/q:race/online/join?ip={ip}&httpPort={port}"
             clipboard = QApplication.clipboard()
             clipboard.setText(link)
-            msg = self.tr.get("Link copied:\n{link}", f"Link copied:\n{link}").format(link=link)
-            QMessageBox.information(self, self.tr.get("Info", "Info"), msg)
-        except Exception as e:
-            msg = self.tr.get("Failed to copy link:\n{e}", f"Fehler beim Kopieren des Links:\n{e}").format(e=e)
-            QMessageBox.information(self, self.tr.get("Info", "Info"), msg)
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     # Icon-Pfad absolut auflösen (für PyInstaller: sys._MEIPASS prüfen)
@@ -624,12 +629,15 @@ if __name__ == "__main__":
     icon_path = os.path.join(base_dir, "nohesi.ico")
 
     app = QApplication(sys.argv)
+    # Setze das Icon für das QApplication-Objekt (Taskbar-Icon)
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
     window = ServerBrowser()
+    # Setze das Icon für das Fenster (Window-Icon)
     if os.path.exists(icon_path):
         window.setWindowIcon(QIcon(icon_path))
+    # Stelle sicher, dass das Fenster als Hauptfenster erkannt wird (Taskbar-Icon)
+    window.setWindowFlags(window.windowFlags() & ~Qt.WindowStaysOnTopHint)
     window.apply_theme()
     window.show()
     sys.exit(app.exec_())
-
