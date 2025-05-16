@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject, QTimer
 from PyQt5.QtGui import QColor, QIcon
+import PyQt5.QtWidgets as QtWidgets
 
 def get_appdata_dir():
     appdata = os.getenv("APPDATA")
@@ -95,7 +96,9 @@ def load_locale(language_code):
             "Players": "Spieler",
             "Traffic": "Verkehr",
             "Type": "Typ",
-            "loading_servers": "Server werden aktualisiert ..."
+            "loading_servers": "Server werden aktualisiert ...",
+            "Link copied:\n{link}": "Link kopiert:\n{link}",
+            "Failed to copy link:\n{e}": "Fehler beim Kopieren des Links:\n{e}"
         }
     elif language_code == "en":
         return {
@@ -122,7 +125,9 @@ def load_locale(language_code):
             "Players": "Players",
             "Traffic": "Traffic",
             "Type": "Type",
-            "loading_servers": "Updating server list ..."
+            "loading_servers": "Updating server list ...",
+            "Link copied:\n{link}": "Link copied:\n{link}",
+            "Failed to copy link:\n{e}": "Failed to copy link:\n{e}"
         }
     return {}
 
@@ -176,7 +181,6 @@ def get_servers_for_car(car_model, tier=None):
 
         car_query = f"{car_model}|{tier}"
         url = f"https://hub.nohesi.gg/servers?car={car_query}"
-        print(f"[DEBUG] Car-API-Call: {url}")  # Debug-Ausgabe
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
@@ -370,7 +374,12 @@ class ServerBrowser(QMainWindow):
         self.join_button.setFont(font)
         self.join_button.clicked.connect(self.join_selected_server)
 
+        self.copy_link_button = QPushButton("Server-Link kopieren")
+        self.copy_link_button.setFixedHeight(32)
+        self.copy_link_button.clicked.connect(self.copy_selected_server_link)
+
         self.layout.addLayout(self.filter_layout)
+        self.layout.addWidget(self.copy_link_button)  # Button unter die Filter
         self.layout.addWidget(self.table)
         self.layout.addWidget(self.join_button)
         self.layout.addWidget(self.info_label)  # Info-Label jetzt unter Join Now
@@ -587,6 +596,24 @@ class ServerBrowser(QMainWindow):
         except Exception as e:
             QMessageBox.information(self, self.tr.get("Info", "Info"),
                                      self.tr.get("Failed to join server:\n{e}", f"Failed to join server:\n{e}").format(e=e))
+
+    def copy_selected_server_link(self):
+        row = self.table.currentRow()
+        if row < 0:
+            msg = self.tr.get("Please select a server first.", "Please select a server first.")
+            QMessageBox.information(self, self.tr.get("Info", "Info"), msg)
+            return
+        ip_port = self.table.item(row, 2).text()
+        try:
+            ip, port = ip_port.split(":")
+            link = f"https://acstuff.club/s/q:race/online/join?ip={ip}&httpPort={port}"
+            clipboard = QApplication.clipboard()
+            clipboard.setText(link)
+            msg = self.tr.get("Link copied:\n{link}", f"Link copied:\n{link}").format(link=link)
+            QMessageBox.information(self, self.tr.get("Info", "Info"), msg)
+        except Exception as e:
+            msg = self.tr.get("Failed to copy link:\n{e}", f"Fehler beim Kopieren des Links:\n{e}").format(e=e)
+            QMessageBox.information(self, self.tr.get("Info", "Info"), msg)
 
 if __name__ == "__main__":
     # Icon-Pfad absolut auflösen (für PyInstaller: sys._MEIPASS prüfen)
