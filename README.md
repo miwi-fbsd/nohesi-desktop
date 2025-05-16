@@ -5,6 +5,18 @@ Displays all active servers, with filtering, favorites, VIP info, car support, a
 
 ---
 
+### 💡 Why This Project Exists
+
+I created this project for one simple reason: **I want to race, not browse**.
+
+* I **hate using a browser** when I'm already in a gaming mindset.
+* The **Content Manager (CM)** is powerful, but **too cluttered** when it comes to quickly finding No Hesi servers.
+
+The No Hesi Server Browser is my personal solution:
+a **minimal, fast, focused** desktop app that shows me only what I care about – and nothing more.
+
+---
+
 ## ⚙️ Features
 
 - ✅ View all active No Hesi servers
