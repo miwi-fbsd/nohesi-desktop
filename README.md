@@ -21,11 +21,3 @@ Displays all active servers, with filtering, favorites, VIP info, car support, a
 - 🧩 PyInstaller-ready for Windows EXE builds
 
 ---
-
-## 🛠️ Installation (Developer version)
-
-```bash
-git clone https://github.com/your-name/nohesi-desktop.git
-cd nohesi-desktop
-pip install -r requirements.txt
-python main.py
