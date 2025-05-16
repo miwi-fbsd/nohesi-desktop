@@ -453,7 +453,7 @@ class ServerBrowser(QMainWindow):
         about_action.triggered.connect(self.show_about_dialog)
         settings_menu.addAction(about_action)
 
-          # Freunde-Menüeintrag direkt ohne Untermenü
+        # Freunde-Menüeintrag direkt ohne Untermenü
         friends_action = QAction(self.tr.get("friends", "Friends"), self)
         friends_action.triggered.connect(self.show_friends_dialog)
         menubar.addAction(friends_action)
@@ -841,3 +841,4 @@ if __name__ == "__main__":
     window.apply_theme()
     window.show()
     sys.exit(app.exec_())
+`
