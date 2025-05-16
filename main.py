@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QRunnable, QThreadPool, pyqtSignal, QObject, QTimer
 from PyQt5.QtGui import QColor, QIcon
 import PyQt5.QtWidgets as QtWidgets
-from friends_client import load_auth, register_user, get_all_friends, add_friend, remove_friend, get_requests, accept_friend, reject_friend, post_status
 
 def get_appdata_dir():
     appdata = os.getenv("APPDATA")
@@ -100,19 +99,7 @@ def load_locale(language_code):
             "loading_servers": "Server werden aktualisiert ...",
             "Link copied:\n{link}": "Link kopiert:\n{link}",
             "Failed to copy link:\n{e}": "Fehler beim Kopieren des Links:\n{e}",
-            "Copy server link": "Server-Link kopieren",
-            "friends": "Freunde",
-            "add_friend": "Freund hinzufügen",
-            "friend_added": "Freund hinzugefügt.",
-            "remove_friend": "Freund entfernen",
-            "friend_removed": "Freund entfernt.",
-            "no_friend_selected": "Bitte zuerst einen Freund auswählen.",
-            "show_requests": "Freundschaftsanfragen anzeigen",
-            "friend_requests": "Freundschaftsanfragen",
-            "pending_requests": "Offene Anfragen:",
-            "accept_friend": "Annehmen",
-            "reject_friend": "Ablehnen",
-            "no_requests": "Keine offenen Freundschaftsanfragen."
+            "Copy server link": "Server-Link kopieren"
         }
     elif language_code == "en":
         return {
@@ -142,19 +129,7 @@ def load_locale(language_code):
             "loading_servers": "Updating server list ...",
             "Link copied:\n{link}": "Link copied:\n{link}",
             "Failed to copy link:\n{e}": "Failed to copy link:\n{e}",
-            "Copy server link": "Copy server link",
-            "friends": "Friends",
-            "add_friend": "Add Friend",
-            "friend_added": "Friend added.",
-            "remove_friend": "Remove Friend",
-            "friend_removed": "Friend removed.",
-            "no_friend_selected": "Please select a friend first.",
-            "show_requests": "Show Friend Requests",
-            "friend_requests": "Friend Requests",
-            "pending_requests": "Pending Requests:",
-            "accept_friend": "Accept",
-            "reject_friend": "Reject",
-            "no_requests": "No pending friend requests."
+            "Copy server link": "Copy server link"
         }
     return {}
 
@@ -264,150 +239,6 @@ class AboutDialog(QDialog):
         layout.addWidget(btns)
         self.setLayout(layout)
 
-class FriendsDialog(QDialog):
-    def __init__(self, parent, auth, server_url, tr):
-        super().__init__(parent)
-        self.setWindowTitle(tr.get("friends", "Friends"))
-        self.auth = auth
-        self.server_url = server_url
-        self.tr = tr
-        self.layout = QVBoxLayout()
-        self.list_widget = QtWidgets.QListWidget()
-        self.refresh_friends()
-        self.layout.addWidget(self.list_widget)
-        self.input = QtWidgets.QLineEdit()
-        self.input.setPlaceholderText(tr.get("add_friend", "Add Friend"))
-        self.layout.addWidget(self.input)
-        add_btn = QPushButton(tr.get("add_friend", "Add Friend"))
-        add_btn.clicked.connect(self.add_friend)
-        self.layout.addWidget(add_btn)
-        remove_btn = QPushButton(tr.get("remove_friend", "Remove Friend"))
-        remove_btn.clicked.connect(self.remove_friend)
-        self.layout.addWidget(remove_btn)
-        # Button für Freundschaftsanfragen
-        self.requests_btn = QPushButton(tr.get("show_requests", "Freundschaftsanfragen anzeigen"))
-        self.requests_btn.clicked.connect(self.show_requests_dialog)
-        self.layout.addWidget(self.requests_btn)
-        self.setLayout(self.layout)
-        self.refresh_timer = QTimer(self)
-        self.refresh_timer.timeout.connect(self.refresh_friends)
-        self.refresh_timer.start(10000)  # Refresh every 10 seconds
-
-        self.status_timer = QTimer(self)
-        self.status_timer.timeout.connect(self.update_status)
-        self.status_timer.start(15000)  # Update status every 15 seconds
-
-    def refresh_friends(self):
-        self.list_widget.clear()
-        try:
-            friends = get_all_friends(self.auth, self.server_url)
-            for f in friends:
-                name = f["name"] if isinstance(f, dict) else f
-                online = f.get("online", False) if isinstance(f, dict) else False
-                item = name + (" (online)" if online else "")
-                self.list_widget.addItem(item)
-        except Exception as e:
-            QMessageBox.warning(self, self.tr.get("friends", "Friends"), str(e))
-
-    def add_friend(self):
-        name = self.input.text().strip()
-        if not name:
-            return
-        try:
-            add_friend(self.auth, name, self.server_url)
-            QMessageBox.information(self, self.tr.get("friends", "Friends"), self.tr.get("friend_added", "Friend added."))
-            self.refresh_friends()
-            self.input.clear()
-        except Exception as e:
-            QMessageBox.warning(self, self.tr.get("friends", "Friends"), str(e))
-
-    def remove_friend(self):
-        selected = self.list_widget.currentItem()
-        if not selected:
-            QMessageBox.information(self, self.tr.get("friends", "Friends"), self.tr.get("no_friend_selected", "Please select a friend first."))
-            return
-        name = selected.text().split(" ")[0]
-        try:
-            remove_friend(self.auth, name, self.server_url)
-            QMessageBox.information(self, self.tr.get("friends", "Friends"), self.tr.get("friend_removed", "Friend removed."))
-            self.refresh_friends()
-        except Exception as e:
-            QMessageBox.warning(self, self.tr.get("friends", "Friends"), str(e))
-
-    def show_requests_dialog(self):
-        try:
-            requests = get_requests(self.auth, self.server_url)
-            if not requests:
-                QMessageBox.information(self, self.tr.get("friends", "Friends"), self.tr.get("no_requests", "Keine offenen Freundschaftsanfragen."))
-                return
-            dlg = QDialog(self)
-            dlg.setWindowTitle(self.tr.get("friend_requests", "Freundschaftsanfragen"))
-            vbox = QVBoxLayout()
-            label = QLabel(self.tr.get("pending_requests", "Offene Anfragen:"))
-            vbox.addWidget(label)
-            list_widget = QtWidgets.QListWidget()
-            for r in requests:
-                list_widget.addItem(r)
-            vbox.addWidget(list_widget)
-            btn_accept = QPushButton(self.tr.get("accept_friend", "Annehmen"))
-            btn_reject = QPushButton(self.tr.get("reject_friend", "Ablehnen"))
-            hbox = QHBoxLayout()
-            hbox.addWidget(btn_accept)
-            hbox.addWidget(btn_reject)
-            vbox.addLayout(hbox)
-            dlg.setLayout(vbox)
-            def accept_selected():
-                item = list_widget.currentItem()
-                if not item:
-                    return
-                try:
-                    accept_friend(self.auth, item.text(), self.server_url)
-                    QMessageBox.information(self, self.tr.get("friends", "Friends"), self.tr.get("friend_added", "Friend added."))
-                    list_widget.takeItem(list_widget.currentRow())
-                    self.refresh_friends()
-                except Exception as e:
-                    QMessageBox.warning(self, self.tr.get("friends", "Friends"), str(e))
-            def reject_selected():
-                item = list_widget.currentItem()
-                if not item:
-                    return
-                try:
-                    reject_friend(self.auth, item.text(), self.server_url)
-                    QMessageBox.information(self, self.tr.get("friends", "Friends"), self.tr.get("friend_removed", "Friend removed."))
-                    list_widget.takeItem(list_widget.currentRow())
-                    self.refresh_friends()
-                except Exception as e:
-                    QMessageBox.warning(self, self.tr.get("friends", "Friends"), str(e))
-            btn_accept.clicked.connect(accept_selected)
-            btn_reject.clicked.connect(reject_selected)
-            dlg.exec_()
-        except Exception as e:
-            QMessageBox.warning(self, self.tr.get("friends", "Friends"), str(e))
-
-    def update_status(self):
-        try:
-            # Replace "127.0.0.1" with the actual IP if available
-            post_status(self.auth, "127.0.0.1", self.server_url)
-        except Exception as e:
-            print(f"Error updating status: {e}")
-
-class UsernameDialog(QDialog):
-    def __init__(self, tr, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(tr.get("add_friend", "Benutzername wählen"))
-        self.layout = QVBoxLayout()
-        self.label = QLabel(tr.get("add_friend", "Bitte gib deinen Benutzernamen ein:"))
-        self.layout.addWidget(self.label)
-        self.input = QtWidgets.QLineEdit()
-        self.layout.addWidget(self.input)
-        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.accepted.connect(self.accept)
-        self.buttons.rejected.connect(self.reject)
-        self.layout.addWidget(self.buttons)
-        self.setLayout(self.layout)
-    def get_username(self):
-        return self.input.text().strip()
-
 class ServerBrowser(QMainWindow):
     def apply_theme(self):
         if self.settings.get("theme") == "dark":
@@ -462,13 +293,6 @@ class ServerBrowser(QMainWindow):
         dlg = AboutDialog(self)
         dlg.exec_()
 
-    def show_friends_dialog(self):
-        if not self.auth:
-            QMessageBox.warning(self, self.tr.get("friends", "Friends"), "Bitte zuerst einloggen/registrieren!")
-            return
-        dlg = FriendsDialog(self, self.auth, self.server_url, self.tr)
-        dlg.exec_()
-
     def set_theme(self, theme):
         self.settings["theme"] = theme
         save_settings(self.settings)
@@ -504,25 +328,6 @@ class ServerBrowser(QMainWindow):
         self.resize(1000, 600)
         self.threadpool = QThreadPool()
         self.favorites = load_favorites()
-        self.server_url = "http://192.168.1.100:8000"  # Passe ggf. an
-        self.auth = load_auth()
-        if not self.auth:
-            # Username abfragen
-            dlg = UsernameDialog(self.tr, self)
-            if dlg.exec_() == QDialog.Accepted:
-                username = dlg.get_username()
-                if username:
-                    try:
-                        self.auth = register_user(username, self.server_url)
-                        QMessageBox.information(self, "Info", f"Registrierung erfolgreich! Willkommen, {username}.")
-                    except Exception as e:
-                        QMessageBox.critical(self, "Fehler", f"Registrierung fehlgeschlagen: {e}")
-                        sys.exit(1)
-                else:
-                    QMessageBox.critical(self, "Fehler", "Kein Benutzername eingegeben.")
-                    sys.exit(1)
-            else:
-                sys.exit(0)
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
