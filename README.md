@@ -30,6 +30,4 @@ a **minimal, fast, focused** desktop app that shows me only what I care about �
 - 💾 Local server cache for faster startup
 - 🔁 Auto-reload with load time display
 - 🔗 One-click connection via `acmanager://` (Content Manager support)
-- 🧩 PyInstaller-ready for Windows EXE builds
-
 ---
