@@ -58,12 +58,12 @@ def get_user_by_token(authorization: str = Header(...)):
 
 @app.post("/register")
 def register(req: RegisterRequest):
-    token = str(uuid4())
     with sqlite3.connect(DB_FILE) as conn:
         c = conn.cursor()
         c.execute("SELECT name FROM users WHERE name = ?", (req.name,))
         if c.fetchone():
             raise HTTPException(status_code=400, detail="User already exists")
+        token = str(uuid4())
         c.execute("INSERT INTO users (name, token) VALUES (?, ?)", (req.name, token))
     return {"token": token}
 
@@ -129,6 +129,31 @@ def remove_friend(data: RemoveFriendRequest, user: str = Depends(get_user_by_tok
         # Optional: Entferne offene Anfragen zwischen den beiden
         c.execute("DELETE FROM friend_requests WHERE (from_user = ? AND to_user = ?) OR (from_user = ? AND to_user = ?)", (user, data.friend, data.friend, user))
     return {"status": "friend removed"}
+
+@app.get("/friends/list")
+def list_friends(user: str = Depends(get_user_by_token)):
+    with sqlite3.connect(DB_FILE) as conn:
+        c = conn.cursor()
+        c.execute("SELECT friend FROM friends WHERE user = ?", (user,))
+        friends = [row[0] for row in c.fetchall()]
+        result = []
+        threshold = datetime.utcnow() - timedelta(seconds=60)
+        for friend in friends:
+            c.execute("SELECT last_seen, last_ip FROM users WHERE name = ?", (friend,))
+            row = c.fetchone()
+            online = False
+            ip = None
+            if row:
+                last_seen = datetime.fromisoformat(row[0]) if row[0] else None
+                if last_seen and last_seen > threshold:
+                    online = True
+                    ip = row[1]
+            result.append({
+                "name": friend,
+                "online": online,
+                "ip": ip
+            })
+    return {"friends": result}
 
 @app.get("/friends/online")
 def online_friends(user: str = Depends(get_user_by_token)):

@@ -76,6 +76,15 @@ def get_online_friends(auth, server_url):
     resp.raise_for_status()
     return resp.json()["online_friends"]
 
+def get_all_friends(auth, server_url):
+    headers = {
+        "Authorization": f"Bearer {auth['token']}",
+        "Content-Type": "application/json"
+    }
+    resp = requests.get(f"{server_url}/friends/list", headers=headers)
+    resp.raise_for_status()
+    return resp.json()["friends"]
+
 def remove_friend(auth, friend_name, server_url):
     headers = {
         "Authorization": f"Bearer {auth['token']}",
